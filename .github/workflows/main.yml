@@ -1,0 +1,48 @@
+name: Free macOS-like RDP
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    steps:
+      - name: Set up environment
+        run: |
+          sudo apt update -y
+          sudo apt install xfce4 xfce4-goodies xrdp firefox -y
+          sudo systemctl enable xrdp
+          sudo systemctl start xrdp
+
+          # macOS-like theme setup
+          mkdir -p ~/.themes ~/.icons
+          cd /tmp
+          wget -qO- https://github.com/vinceliuice/WhiteSur-gtk-theme/archive/refs/heads/master.zip -O theme.zip
+          unzip theme.zip
+          cd WhiteSur-gtk-theme-master
+          ./install.sh -d ~/.themes
+          xfconf-query -c xsettings -p /Net/ThemeName -s "WhiteSur-Dark"
+          xfconf-query -c xsettings -p /Net/IconThemeName -s "WhiteSur-dark"
+
+          # set password for RDP
+          echo "rdpuser:12345" | sudo chpasswd
+
+          # allow login
+          sudo adduser rdpuser --gecos "" --disabled-password
+          echo "rdpuser:12345" | sudo chpasswd
+          sudo usermod -aG sudo rdpuser
+
+      - name: Start Ngrok tunnel
+        run: |
+          wget -q -O ngrok.zip https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.zip
+          unzip ngrok.zip
+          chmod +x ngrok
+          ./ngrok config add-authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
+          ./ngrok tcp 3389 --region ap &> ngrok.log &
+          sleep 10
+          echo "RDP is ready! Use these credentials:"
+          echo "Username: rdpuser"
+          echo "Password: 12345"
+          curl -s http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url'
